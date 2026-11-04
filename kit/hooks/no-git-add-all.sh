@@ -25,6 +25,23 @@ else
 fi
 [ -n "$CMD" ] || exit 0
 case "$CMD" in *git*) ;; *) exit 0 ;; esac
+block_add() {
+  echo "Blocked by no-git-add-all.sh: stage files by name, for example: git add src/app.ts README.md" >&2
+  echo "Run git status first to see what changed, and leave out anything you did not mean to touch." >&2
+  exit 2
+}
+block_commit() {
+  echo "Blocked by no-git-add-all.sh: this commit takes every changed file in the repo. Add files by name, then git commit -m." >&2
+  exit 2
+}
+
+# First pass, a plain pattern check that needs nothing installed. It runs every
+# time, so if Python is missing or fails, the common bulk forms still get blocked.
+FLAT="$(printf '%s' "$CMD" | tr -d "\"'")"
+printf '%s' "$FLAT" | grep -Eq 'git[[:space:]]+([^;&|]*[[:space:]])?add([[:space:]][^;&|]*)?[[:space:]](-[a-zA-Z]*[Au][a-zA-Z]*|--all|--update|\.|\./|\*|:/|:\(top\))([[:space:]]|;|&|\||[},]|$)' && block_add
+printf '%s' "$FLAT" | grep -Eq 'git[[:space:]]+([^;&|]*[[:space:]])?commit([[:space:]][^;&|]*)?[[:space:]](-[a-zA-Z]*a[a-zA-Z]*|--all)([[:space:]]|;|&|\||[},]|$)' && block_commit
+
+# Second pass, the careful one, needs Python 3 (macOS has it with the developer tools).
 command -v python3 >/dev/null 2>&1 || exit 0
 
 VERDICT="$(printf '%s' "$CMD" | python3 -I -c '
@@ -32,16 +49,17 @@ import shlex, sys
 
 cmd = sys.stdin.read()
 try:
-    lex = shlex.shlex(cmd, posix=True, punctuation_chars=";&|()")
+    lex = shlex.shlex(cmd, posix=True, punctuation_chars=";&|()\n")
+    lex.whitespace = " \t\r"
     lex.whitespace_split = True
     words = list(lex)
 except ValueError:
-    words = cmd.split()
+    words = cmd.replace("\n", " ; ").split()
 
 # Split into simple commands at ; && || | ( ).
 pieces, cur = [], []
 for w in words:
-    if w and set(w) <= set(";&|()"):
+    if w and set(w) <= set(";&|()\n"):
         pieces.append(cur); cur = []
     else:
         cur.append(w)
@@ -62,7 +80,7 @@ def long_prefix_of(arg, *names):
 for p in pieces:
     # skip env assignments and wrappers before git
     i = 0
-    while i < len(p) and ("=" in p[i] and not p[i].startswith("-") or p[i] in {"sudo", "env", "command", "exec", "nohup", "time"}):
+    while i < len(p) and ("=" in p[i] and not p[i].startswith("-") or p[i] in {"sudo", "env", "command", "exec", "nohup", "time", "then", "do", "else", "elif", "if", "while", "until", "{", "}", "!", "xargs"}):
         i += 1
     if i >= len(p) or p[i].rsplit("/", 1)[-1] != "git":
         continue
@@ -113,14 +131,7 @@ for p in pieces:
 ' 2>/dev/null)"
 
 case "$VERDICT" in
-  add)
-    echo "Blocked by no-git-add-all.sh: stage files by name, for example: git add src/app.ts README.md" >&2
-    echo "Run git status first to see what changed, and leave out anything you did not mean to touch." >&2
-    exit 2
-    ;;
-  commit)
-    echo "Blocked by no-git-add-all.sh: this commit takes every changed file in the repo. Add files by name, then git commit -m." >&2
-    exit 2
-    ;;
+  add) block_add ;;
+  commit) block_commit ;;
 esac
 exit 0
