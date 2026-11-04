@@ -6,6 +6,10 @@ You don't need to know how to code to start. Everything here assumes you're star
 
 Text me if you get stuck on anything. I mean it.
 
+There are two parts. The [guide](guide/) gets you building, start to live link. The [AI-native engineer track](track/) is how you get good: six levels, each with a checkpoint you do without help, built on one belief I have. Being resourceful, efficient, iterative and creative with AI can be learned. By default people use AI to make slop and slowly hand over their own thinking. This repo is built to do the opposite, so you get sharper every month you use it.
+
+The [kit](kit/) is a starter version of my own Claude Code setup (rules, hooks, skills and subagents), adapted from the kit I use every day. You'll install it piece by piece at level 4 of the track.
+
 ## Start here
 
 | Step | Read this                                                                    | Time       | You'll have                                       |
@@ -19,11 +23,23 @@ Text me if you get stuck on anything. I mean it.
 | 7    | [Taste: making it look good, not generated](guide/07-taste.md)               | 15 min     | The checklist I run before I show anyone anything |
 | 8    | [Using AI for church operations](guide/08-church-ops.md)                     | 15 min     | Ideas sized for a Director of Operations          |
 
+Then go up the levels in [track/](track/README.md):
+
+| Level | You can |
+| --- | --- |
+| 0 | [Think with AI without losing your own thinking](track/00-stay-the-engineer.md) |
+| 1 | [Ship a small thing](track/level-1-ship.md) |
+| 2 | [Read what the AI wrote and catch it being wrong](track/level-2-read-and-verify.md) |
+| 3 | [Give the AI the context it needs](track/level-3-context.md) |
+| 4 | [Build your own setup: rules, skills, hooks, subagents](track/level-4-your-setup.md) |
+| 5 | [Run several agents at once and still know what's true](track/level-5-parallel.md) |
+
 Then keep these open while you work:
 
 - [prompts/](prompts/): copy-paste prompts for planning, building, fixing, reviewing and writing
 - [templates/CLAUDE.md](templates/CLAUDE.md): drop this in every new project so Claude knows your rules
 - [skills/coach-me](skills/coach-me/SKILL.md): a skill that turns Claude into a coach for this playbook
+- [kit/](kit/): my setup, adapted for you
 
 ## Let Claude teach you this repo
 

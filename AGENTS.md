@@ -9,7 +9,9 @@ A step-by-step playbook for someone new to code who wants to build with AI. The 
 ## Map
 
 - `README.md`: the start page and the order to read things in
-- `guide/01-08`: the curriculum, in order
+- `guide/01-08`: getting started, in order
+- `track/`: the AI-native engineer levels 0 to 5, each with a checkpoint
+- `kit/`: a starter Claude Code setup (rules, hooks, skills, agents) to install at level 4
 - `prompts/README.md`: copy-paste prompts
 - `templates/CLAUDE.md`: the rules file Ryan copies into his own projects
 - `skills/coach-me/SKILL.md`: how to coach him through the guide
