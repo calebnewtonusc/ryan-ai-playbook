@@ -272,6 +272,13 @@ expect no-env-commit.sh block "git add a folder holding a .env" "$(cwd_payload '
 expect no-env-commit.sh block "git add a glob that matches a .env" "$(cwd_payload "git add 'config/*' && git commit -m wip" "$REPO")"
 expect no-env-commit.sh allow "git add a folder with no secrets" "$(cwd_payload 'git add src' "$REPO")"
 expect no-env-commit.sh block "git --git-dir elsewhere" "$(cwd_payload 'git --git-dir=/x/.git --work-tree=/x commit -m wip' "$REPO")"
+expect no-env-commit.sh block "commit inside bash -c" "$(cwd_payload "bash -c 'cd app && git commit -m wip'" "$TMP/outer")"
+expect no-env-commit.sh block "commit after cd -" "$(cwd_payload 'cd - && git commit -m wip' "$REPO")"
+expect no-env-commit.sh block "commit in a subshell" "$(cwd_payload '(cd app && git commit -m wip)' "$TMP/outer")"
+# A repo's own fsmonitor config must not run while the hook inspects it.
+git -C "$SUB" config core.fsmonitor "touch $TMP/fsmonitor-ran; false"
+cwd_payload 'cd app && git commit -m wip' "$TMP/outer" | bash ./no-env-commit.sh 2>/dev/null
+if [ -e "$TMP/fsmonitor-ran" ]; then echo "FAIL  no-env-commit.sh  repo fsmonitor ran during the check"; FAILS=$((FAILS + 1)); else echo "PASS  no-env-commit.sh  allow  repo fsmonitor does not run during the check"; fi
 
 # untrusted-content-check.sh
 web_payload() { jq -n --arg r "$1" '{tool_name: "WebFetch", tool_input: {url: "https://example.com"}, tool_response: $r}'; }
