@@ -167,7 +167,7 @@ instead of a polite request.
 | `block-destructive.sh` | Before every terminal command | Stops the AI from running `rm -rf` on your home folder, `git reset --hard` over unsaved work, force pushes, `DROP TABLE`, or `curl ... \| sh`. Those stay in your hands. |
 | `no-git-add-all.sh`    | Before every terminal command | Stops `git add .` and `git add -A`, the usual way passwords and giant files end up on GitHub.                                                                            |
 | `protect-secrets.sh`   | Before every file write       | Blocks an API key or private key from being written into code, and reminds Claude to check `.gitignore` when it writes a `.env` file.                                    |
-| `format-on-write.sh`   | After every file write        | Runs your project's formatter (Prettier, or Ruff/Black for Python) so code style stays consistent. Never downloads anything, never blocks.                               |
+| `format-on-write.sh`   | After every file write        | Formats the file with a Prettier you installed yourself (`npm install -g prettier`), or Ruff/Black for Python. It never runs a formatter or config that came inside a repo, unless you list that project folder in `~/.claude/trusted-format-dirs`. Never blocks.                               |
 | `stop-slop-check.sh`   | When Claude finishes a reply  | Sends the reply back for a rewrite if it has em dashes or words like "delve" and "seamless". Runs once per reply, so it cannot loop.                                     |
 
 ### Skills

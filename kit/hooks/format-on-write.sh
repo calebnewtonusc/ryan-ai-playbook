@@ -6,8 +6,7 @@
 # harder. Running the project's own formatter after each write keeps the
 # style consistent without anyone thinking about it.
 #
-# It only uses a formatter the project already installed (node_modules/.bin)
-# or one on your PATH. It never downloads anything, and it never fails the
+# It only uses a formatter you installed yourself on your PATH. It never downloads anything, and it never fails the
 # write: if no formatter is found, it quietly does nothing.
 
 INPUT="$(cat)"
@@ -24,28 +23,24 @@ ROOT="$(cd "$ROOT" 2>/dev/null && pwd -P)" || exit 0
 FILE_ABS="$(cd "$(dirname "$FILE")" && pwd -P)/$(basename "$FILE")"
 case "$FILE_ABS" in "$ROOT"/*) ;; *) exit 0 ;; esac
 
-# The project's own prettier, searched from the file up to the project root and
-# no further. It must be the real prettier package (its bin points into
-# node_modules/prettier/), so a planted executable named prettier is ignored.
-# Otherwise fall back to a prettier you installed yourself on your PATH.
-find_local_prettier() {
-  local dir target
-  dir="$(dirname "$FILE_ABS")"
-  while :; do
-    if [ -x "$dir/node_modules/.bin/prettier" ]; then
-      target="$(cd "$dir/node_modules/.bin" && pwd -P)/$(readlink "$dir/node_modules/.bin/prettier" 2>/dev/null)"
-      case "$target" in */node_modules/prettier/*) echo "$dir/node_modules/.bin/prettier"; return 0 ;; esac
-    fi
-    [ "$dir" = "$ROOT" ] && break
-    dir="$(dirname "$dir")"
-  done
-  command -v prettier 2>/dev/null
-}
+# Which prettier runs: only one YOU installed on your PATH (npm install -g
+# prettier), never a file from inside the repo. A repo you cloned could ship
+# its own "prettier" or a config that loads plugins, and either would run code
+# you never read. Project config (.prettierrc and its plugins) is only used for
+# folders you list, one per line, in ~/.claude/trusted-format-dirs. Everywhere
+# else prettier runs with --no-config, so it formats with defaults and loads
+# nothing from the repo.
+PRETTIER="$(command -v prettier 2>/dev/null)"
+CONFIG_FLAGS="--no-config --no-editorconfig"
+TRUSTED_LIST="$HOME/.claude/trusted-format-dirs"
+if [ -f "$TRUSTED_LIST" ] && grep -Fxq "$ROOT" "$TRUSTED_LIST"; then
+  CONFIG_FLAGS=""
+fi
 
 case "$FILE" in
   *.ts | *.tsx | *.js | *.jsx | *.mjs | *.cjs | *.json | *.css | *.scss | *.html | *.md | *.yml | *.yaml)
-    PRETTIER="$(find_local_prettier)"
-    [ -n "$PRETTIER" ] && "$PRETTIER" --write --log-level warn "$FILE_ABS" >/dev/null 2>&1
+    # shellcheck disable=SC2086
+    [ -n "$PRETTIER" ] && "$PRETTIER" $CONFIG_FLAGS --write --log-level warn "$FILE_ABS" >/dev/null 2>&1
     ;;
   *.py)
     if command -v ruff >/dev/null 2>&1; then
