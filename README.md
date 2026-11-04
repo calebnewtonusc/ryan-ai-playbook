@@ -6,6 +6,8 @@ You don't need to know how to code to start. Everything here assumes you're star
 
 Text me if you get stuck on anything. I mean it.
 
+There's now a general version of this playbook that anyone can use, with a no-code path too: [ai-playbook](https://github.com/calebnewtonusc/ai-playbook). Same guide and tracks, kept up to date there.
+
 There are two parts. The [guide](guide/) gets you building, start to live link. The [AI-native engineer track](track/) is how you get good: six levels, each with a checkpoint you do without help, built on one belief I have. Being resourceful, efficient, iterative and creative with AI can be learned. By default people use AI to make slop and slowly hand over their own thinking. This repo is built to do the opposite, so you get sharper every month you use it.
 
 The [kit](kit/) is a starter version of my own Claude Code setup (rules, hooks, skills and subagents), adapted from the kit I use every day. You'll install it piece by piece at level 4 of the track.
