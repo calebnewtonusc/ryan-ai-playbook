@@ -247,6 +247,8 @@ unset ZSH_TRAPS_SHELL
 # no-env-commit.sh
 REPO="$TMP/repo"
 git init -q "$REPO" && : >"$REPO/.env" && : >"$REPO/README.md"
+# Files the allow cases stage really exist: a dry run of a missing path fails closed.
+: >"$REPO/.env.example" && : >"$REPO/.gitignore" && mkdir -p "$REPO/src" && : >"$REPO/src/app.ts"
 cwd_payload() { jq -n --arg c "$1" --arg d "$2" '{tool_name: "Bash", tool_input: {command: $c}, cwd: $d}'; }
 expect no-env-commit.sh block "git add .env" "$(cwd_payload 'git add .env' "$REPO")"
 expect no-env-commit.sh block "git add a private key" "$(cwd_payload 'git add certs/server.pem' "$REPO")"
@@ -277,6 +279,10 @@ printf '.env\n' >"$REPO/config/.gitignore"
 expect no-env-commit.sh block "git add -f a folder whose .env is gitignored" "$(cwd_payload 'git add -f config' "$REPO")"
 expect no-env-commit.sh block "git add with a variable" "$(cwd_payload 'git add $FILES' "$REPO")"
 expect no-env-commit.sh allow "git add -f a plain file" "$(cwd_payload 'git add -f README.md' "$REPO")"
+expect no-env-commit.sh block "git add -e cannot be checked" "$(cwd_payload 'git add -e README.md' "$REPO")"
+expect no-env-commit.sh block "git add --pathspec-from-file" "$(cwd_payload 'git add --pathspec-from-file=list.txt' "$REPO")"
+expect no-env-commit.sh block "git add of a path git cannot resolve" "$(cwd_payload 'git add nope/missing.txt' "$REPO")"
+expect no-env-commit.sh block "escaped quote hiding a subshell" "$(cwd_payload "echo \"x\\\" (cd app; git commit -m wip) \\\"\"" "$TMP/outer")"
 expect no-env-commit.sh block "commit inside sh -xc" "$(cwd_payload "sh -xc 'git commit -m wip'" "$REPO")"
 expect no-env-commit.sh block "commit via eval" "$(cwd_payload "eval 'git commit -m wip'" "$REPO")"
 expect no-env-commit.sh block "add via xargs" "$(cwd_payload 'ls | xargs git add' "$REPO")"
