@@ -16,15 +16,27 @@ command -v jq >/dev/null 2>&1 || exit 0
 FILE="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_response.filePath // empty' 2>/dev/null)"
 [ -n "$FILE" ] && [ -f "$FILE" ] || exit 0
 
-# Walk up from the file to find the project's own prettier, if it has one.
+# Only format files inside the project Claude is working in. A file outside it
+# (say, a repo you just cloned to look at) never gets a formatter run on it.
+ROOT="${CLAUDE_PROJECT_DIR:-$(git -C "$(dirname "$FILE")" rev-parse --show-toplevel 2>/dev/null)}"
+[ -n "$ROOT" ] || exit 0
+ROOT="$(cd "$ROOT" 2>/dev/null && pwd -P)" || exit 0
+FILE_ABS="$(cd "$(dirname "$FILE")" && pwd -P)/$(basename "$FILE")"
+case "$FILE_ABS" in "$ROOT"/*) ;; *) exit 0 ;; esac
+
+# The project's own prettier, searched from the file up to the project root and
+# no further. It must be the real prettier package (its bin points into
+# node_modules/prettier/), so a planted executable named prettier is ignored.
+# Otherwise fall back to a prettier you installed yourself on your PATH.
 find_local_prettier() {
-  local dir
-  dir="$(cd "$(dirname "$FILE")" && pwd)"
-  while [ "$dir" != "/" ]; do
+  local dir target
+  dir="$(dirname "$FILE_ABS")"
+  while :; do
     if [ -x "$dir/node_modules/.bin/prettier" ]; then
-      echo "$dir/node_modules/.bin/prettier"
-      return 0
+      target="$(cd "$dir/node_modules/.bin" && pwd -P)/$(readlink "$dir/node_modules/.bin/prettier" 2>/dev/null)"
+      case "$target" in */node_modules/prettier/*) echo "$dir/node_modules/.bin/prettier"; return 0 ;; esac
     fi
+    [ "$dir" = "$ROOT" ] && break
     dir="$(dirname "$dir")"
   done
   command -v prettier 2>/dev/null
@@ -33,13 +45,13 @@ find_local_prettier() {
 case "$FILE" in
   *.ts | *.tsx | *.js | *.jsx | *.mjs | *.cjs | *.json | *.css | *.scss | *.html | *.md | *.yml | *.yaml)
     PRETTIER="$(find_local_prettier)"
-    [ -n "$PRETTIER" ] && "$PRETTIER" --write --log-level warn "$FILE" >/dev/null 2>&1
+    [ -n "$PRETTIER" ] && "$PRETTIER" --write --log-level warn "$FILE_ABS" >/dev/null 2>&1
     ;;
   *.py)
     if command -v ruff >/dev/null 2>&1; then
-      ruff format --quiet "$FILE" >/dev/null 2>&1
+      ruff format --quiet "$FILE_ABS" >/dev/null 2>&1
     elif command -v black >/dev/null 2>&1; then
-      black --quiet "$FILE" >/dev/null 2>&1
+      black --quiet "$FILE_ABS" >/dev/null 2>&1
     fi
     ;;
 esac

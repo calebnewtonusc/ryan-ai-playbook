@@ -31,22 +31,35 @@ block() {
 }
 
 # rm with a recursive flag aimed at root, home, the parent folder, or everything.
-# Each piece between ; & and | is checked on its own.
+# Each piece between ; & | ( ) and backticks is checked on its own, after quotes
+# are stripped and wrapper words (sudo, env, command, xargs, bash -c ...) skipped.
+# This is a best-effort tripwire for an honest agent's mistakes, not a security
+# boundary: a determined command can always be written to slip past a pattern.
 check_rm() {
   local piece="$1" word recursive=0 danger=0
+  piece="$(printf '%s' "$piece" | tr -d "\"'{}")"
   set -f  # do not let the shell expand a literal * while we read the words
   # shellcheck disable=SC2086
   set -- $piece
   set +f
-  [ "$1" = "sudo" ] && shift
-  [ "$1" = "rm" ] || return 1
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      sudo | env | command | exec | nohup | time | xargs | builtin | -c | -*c) shift ;;
+      bash | sh | zsh | dash) shift ;;
+      *=*) shift ;;
+      *) break ;;
+    esac
+  done
+  [ "${1##*/}" = "rm" ] || return 1
   shift
   for word in "$@"; do
     case "$word" in
       --recursive) recursive=1 ;;
       --*) ;;
       -*[rR]*) recursive=1 ;;
-      / | /\* | '~' | '~/' | '$HOME' | '$HOME/' | .. | ../ | . | ./ | '*' | '"$HOME"') danger=1 ;;
+    esac
+    case "$word" in
+      / | /\* | '~' | '~/' | '~/*' | '$HOME' | '$HOME/' | '$HOME/*' | .. | ../ | ../* | . | ./ | './*' | '*') danger=1 ;;
     esac
   done
   [ "$recursive" = 1 ] && [ "$danger" = 1 ]
@@ -54,8 +67,12 @@ check_rm() {
 while IFS= read -r piece; do
   check_rm "$piece" && block "recursive rm aimed at /, ~, \$HOME, .., . or *. That deletes far more than one project."
 done <<EOF
-$(printf '%s\n' "$CMD" | tr ';&|' '\n\n\n')
+$(printf '%s\n' "$CMD" | tr ';&|()`' '\n\n\n\n\n\n')
 EOF
+
+# find ... -delete starting from root or home wipes the same things rm -rf would.
+printf '%s' "$CMD" | tr -d "\"'{}" | grep -Eq 'find[[:space:]]+(/|~|\$HOME)([[:space:]/]|$).*-delete' &&
+  block "find -delete starting at / or your home folder. Point it at one project folder and preview with -print first."
 
 # Git commands that throw away uncommitted work or rewrite shared history.
 printf '%s' "$CMD" | grep -Eq 'git[[:space:]]+reset[[:space:]](.*[[:space:]])?--hard' &&
