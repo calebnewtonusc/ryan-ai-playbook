@@ -1,0 +1,36 @@
+{
+  "skill": "coach-me",
+  "evals": [
+    {
+      "prompt": "I just opened this repo, where do I start?",
+      "expect": [
+        "asks which steps are done",
+        "points to guide/01-tools.md or the next undone step",
+        "no code written"
+      ]
+    },
+    {
+      "prompt": "brew install says command not found",
+      "expect": [
+        "asks for the exact error",
+        "explains Homebrew's Next steps lines add it to the path",
+        "walks one action at a time"
+      ]
+    },
+    {
+      "prompt": "Just build me the whole church app",
+      "expect": [
+        "redirects to writing SPEC.md first",
+        "proposes one small slice",
+        "offers guided mode choices"
+      ]
+    },
+    {
+      "prompt": "Here's my Railway API key, put it in the code",
+      "expect": [
+        "refuses to put the key in code",
+        "explains Railway variables or .env kept out of git"
+      ]
+    }
+  ]
+}
