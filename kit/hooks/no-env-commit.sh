@@ -40,14 +40,40 @@ if [ -n "$ADD_ARGS" ]; then
   done
 fi
 
-# Files already staged, when committing.
+# Files already staged, when committing. The commit may run in another repo
+# than the session folder (`cd app && git commit`, `git -C app commit`), so
+# check the session folder plus every folder the command names.
 if printf '%s' "$CMD" | grep -qE '\bgit\b.*\bcommit\b'; then
-  DIR="${CWD:-$PWD}"
-  STAGED="$(git -C "$DIR" diff --cached --name-only 2>/dev/null)"
-  while IFS= read -r f; do
-    [ -n "$f" ] || continue
-    printf '%s' "$f" | grep -qE "$SAFE" && continue
-    printf '%s' "$f" | grep -qE "$SECRET" && block "$f (staged)"
-  done <<<"$STAGED"
+  BASE="${CWD:-$PWD}"
+  DIRS="$BASE"
+  TARGETS="$(printf '%s\n' "$CMD" | tr ';&|' '\n\n\n' | sed -nE \
+    -e 's/^[[:space:]]*(cd|pushd)[[:space:]]+([^[:space:]]+).*/\2/p' \
+    -e 's/.*git[[:space:]]+-C[[:space:]]+([^[:space:]]+).*/\1/p')"
+  while IFS= read -r t; do
+    [ -n "$t" ] || continue
+    t="${t%\"}"; t="${t#\"}"; t="${t%\'}"; t="${t#\'}"
+    case "$t" in
+      *'$'* | *'`'*)
+        # A variable we cannot expand here: refuse rather than check the wrong repo.
+        echo "Blocked by no-env-commit.sh: this commit runs in $t, which this hook cannot resolve, so it cannot check what is staged there." >&2
+        echo "Run the commit with a literal path (cd path/to/repo && git commit ...) so the staged files can be checked." >&2
+        exit 2 ;;
+      "~") t="$HOME" ;;
+      "~/"*) t="$HOME/${t#\~/}" ;;
+      /*) ;;
+      *) t="$BASE/$t" ;;
+    esac
+    DIRS="$DIRS
+$t"
+  done <<<"$TARGETS"
+  while IFS= read -r d; do
+    [ -d "$d" ] || continue
+    STAGED="$(git -C "$d" diff --cached --name-only 2>/dev/null)"
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      printf '%s' "$f" | grep -qE "$SAFE" && continue
+      printf '%s' "$f" | grep -qE "$SECRET" && block "$f (staged in $d)"
+    done <<<"$STAGED"
+  done <<<"$DIRS"
 fi
 exit 0

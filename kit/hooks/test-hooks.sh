@@ -258,6 +258,14 @@ expect no-env-commit.sh allow "commit with only README staged" "$(cwd_payload 'g
 # Review regression: .env inside a commit message is not a file being added.
 expect no-env-commit.sh allow "commit message mentions .env" "$(cwd_payload 'git commit -m "add .env to gitignore" README.md' "$REPO")"
 expect no-env-commit.sh allow "git add .gitignore, message names .env" "$(cwd_payload 'git add .gitignore && git commit -m "ignore .env"' "$REPO")"
+# Security review regression: the commit runs in a different repo than the session folder.
+SUB="$TMP/outer/app"
+mkdir -p "$TMP/outer" && git init -q "$SUB" && : >"$SUB/.env" && git -C "$SUB" add -f .env
+expect no-env-commit.sh block "cd into another repo with .env staged" "$(cwd_payload 'cd app && git commit -m wip' "$TMP/outer")"
+expect no-env-commit.sh block "git -C another repo with .env staged" "$(cwd_payload "git -C $SUB commit -m wip" "$TMP")"
+expect no-env-commit.sh block "cd to a variable it cannot resolve" "$(cwd_payload 'cd "$APP" && git commit -m wip' "$TMP")"
+git -C "$SUB" rm -q --cached .env
+expect no-env-commit.sh allow "cd into another repo with nothing secret staged" "$(cwd_payload 'cd app && git commit -m wip' "$TMP/outer")"
 
 # untrusted-content-check.sh
 web_payload() { jq -n --arg r "$1" '{tool_name: "WebFetch", tool_input: {url: "https://example.com"}, tool_response: $r}'; }
