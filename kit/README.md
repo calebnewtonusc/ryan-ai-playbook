@@ -181,7 +181,7 @@ Before a terminal command runs:
 | ---------------------- | ----------------- |
 | `block-destructive.sh` | The AI running `rm -rf` on your home folder, `git reset --hard` over unsaved work, force pushes, `DROP TABLE`, or `curl ... \| sh`. Those stay in your hands. |
 | `no-git-add-all.sh`    | `git add .`, `git add -A`, `git commit -a` and their other spellings, the usual way passwords and giant files end up on GitHub. |
-| `no-env-commit.sh`     | A `.env` file, private key or credentials file getting staged or committed, by name or because it was already staged. Once pushed, a key stays in the history forever. |
+| `no-env-commit.sh`     | A `.env` file, private key or credentials file getting staged or committed: by name, through a folder or glob (it asks git what the add would stage), or because it was already staged. It also refuses git run through tricks it can't follow (`sh -c`, `eval`, `xargs`, a variable path), so it never checks the wrong repo. Once pushed, a key stays in the history forever. |
 | `no-endless-wait.sh`   | A "wait until the server is up" loop with no cap, which runs forever in the background if the check can never pass. |
 | `zsh-traps.sh`         | Bash habits that break silently in zsh, the Mac's default shell: a variable named `path` wiping your PATH, assigning `status`, and loops over `$list` that run once. Does nothing if your shell is not zsh. |
 
