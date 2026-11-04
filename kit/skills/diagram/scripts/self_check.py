@@ -91,12 +91,28 @@ class DiagramParser(HTMLParser):
             data.setdefault(key, value)
         if tag in {"base", "embed", "object", "iframe"}:
             self.unsafe.append(f"<{tag}> is not allowed in a diagram file")
+        if tag == "meta" and data.get("http-equiv", "").casefold() == "refresh":
+            self.unsafe.append("<meta http-equiv=refresh> is not allowed in a diagram file")
+        if tag in {"animate", "set", "animatemotion", "animatetransform"}:
+            # SMIL can rewrite href at runtime, so its values are references too.
+            if data.get("attributename", "").casefold() in {"href", "xlink:href"}:
+                for attr in ("to", "from", "by"):
+                    if attr in data:
+                        self.references.append((tag, "", data[attr]))
+                for part in data.get("values", "").split(";"):
+                    if part.strip():
+                        self.references.append((tag, "", part))
         for key, value in normalized_attrs:
             if key.startswith("on"):
                 self.unsafe.append(f"executable attribute {key} on <{tag}>")
             if key == "srcdoc":
                 self.unsafe.append(f"srcdoc attribute on <{tag}>")
-            if key in REFERENCE_ATTRS:
+            if key == "srcset":
+                # Each comma-separated candidate is its own URL.
+                for candidate in value.split(","):
+                    url = candidate.strip().split(" ", 1)[0]
+                    self.references.append((tag, data.get("rel", ""), url))
+            elif key in REFERENCE_ATTRS:
                 self.references.append((tag, data.get("rel", ""), value))
             if key in CSS_REFERENCE_ATTRS:
                 self.css_attributes.append(value)
@@ -210,7 +226,8 @@ def is_approved_google_fonts_stylesheet(value: str) -> bool:
 
 
 def reference_error(tag: str, rel: str, value: str) -> str | None:
-    stripped = value.strip()
+    # Browsers drop tab/newline inside URLs and treat a backslash like a slash.
+    stripped = re.sub(r"[\t\n\r]", "", value).strip().replace("\\", "/")
     lowered = stripped.casefold()
     if not stripped or stripped.startswith("#"):
         return None

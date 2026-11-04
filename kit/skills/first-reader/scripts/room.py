@@ -34,7 +34,8 @@ N1, N2 = "\ue006", "\ue007"
 
 
 def esc(t):
-    return html.escape(t, quote=False)
+    # quote=True: esc() output also lands inside title="" and aria-label="" attributes.
+    return html.escape(t, quote=True)
 
 
 class Marker:
@@ -193,7 +194,7 @@ def render_skim(skim):
 
 
 def render_ask_hint(sessions):
-    names = " or ".join(f'"ask {s["initial"]} ..."' for s in sessions[:2])
+    names = " or ".join(f'"ask {esc(s["initial"])} ..."' for s in sessions[:2])
     return (f'<div class="askhint">These are people you can consult. In chat: {names}, '
             f'"ask the skimmer what would have made them open it", or "ask everyone ...". '
             f'Revise in your own editor, then "again" for a fresh read.</div>')
@@ -262,6 +263,8 @@ def build(run_dir, out_path, ann):
         meta = readers_meta.get(s["dir"], {})
         persona = s["state"].get("persona") or s["dir"]
         initial = meta.get("initial") or persona[:1].upper()
+        # Initials go into the page and into "ask X" commands: letters and digits only.
+        initial = re.sub(r"[^A-Za-z0-9]", "", str(initial))[:4] or f"R{ix + 1}"
         while initial in used_initials:
             initial += "2"
         used_initials.add(initial)

@@ -29,51 +29,70 @@ block() {
   exit 2
 }
 
+# Every folder the command can run git in: the session folder, plus each
+# `cd X` and `git -C X` it names. A path we cannot resolve gets refused rather
+# than checked in the wrong repo.
+BASE="${CWD:-$PWD}"
+DIRS="$BASE"
+if printf '%s' "$CMD" | grep -qE -- '--git-dir|--work-tree|GIT_DIR=|GIT_WORK_TREE='; then
+  echo "Blocked by no-env-commit.sh: --git-dir, --work-tree or GIT_DIR point git at a repo this hook cannot check." >&2
+  echo "Run git from inside the repo (cd path/to/repo && git ...) instead." >&2
+  exit 2
+fi
+TARGETS="$(printf '%s\n' "$CMD" | tr ';&|' '\n\n\n' | sed -nE \
+  -e 's/^[[:space:]]*(cd|pushd)[[:space:]]+([^[:space:]]+).*/\2/p' \
+  -e 's/.*git[[:space:]]+-C[[:space:]]+([^[:space:]]+).*/\1/p')"
+while IFS= read -r t; do
+  [ -n "$t" ] || continue
+  t="${t%\"}"; t="${t#\"}"; t="${t%\'}"; t="${t#\'}"
+  case "$t" in
+    *'$'* | *'`'*)
+      echo "Blocked by no-env-commit.sh: this git command runs in $t, which this hook cannot resolve, so it cannot check the files." >&2
+      echo "Use a literal path (cd path/to/repo && git ...) so the files can be checked." >&2
+      exit 2 ;;
+    "~") t="$HOME" ;;
+    "~/"*) t="$HOME/${t#\~/}" ;;
+    /*) ;;
+    *) t="$BASE/$t" ;;
+  esac
+  DIRS="$DIRS
+$t"
+done <<<"$TARGETS"
+
+check_list() {  # check_list <label> <newline-separated paths>
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    printf '%s' "$f" | grep -qE "$SAFE" && continue
+    printf '%s' "$f" | grep -qE "$SECRET" && block "$f ($1)"
+  done <<<"$2"
+}
+
 # Files named after `git add`. set -f stops a * in the command from expanding here.
 set -f
 ADD_ARGS="$(printf '%s\n' "$CMD" | tr ';&|' '\n\n\n' | sed -nE 's/^[[:space:]]*git([[:space:]]+-[Cc][[:space:]]+[^[:space:]]+)*[[:space:]]+add[[:space:]]+//p')"
 if [ -n "$ADD_ARGS" ]; then
   for word in $ADD_ARGS; do
     word="${word%\"}"; word="${word#\"}"; word="${word%\'}"; word="${word#\'}"
+    case "$word" in -*) continue ;; esac
     printf '%s' "$word" | grep -qE "$SAFE" && continue
     printf '%s' "$word" | grep -qE "$SECRET" && block "$word"
+    # A folder or a glob can pull in a .env it does not name: ask git what it would add.
+    while IFS= read -r d; do
+      git -C "$d" rev-parse --is-inside-work-tree >/dev/null 2>&1 || continue
+      if [ -d "$d/$word" ] || printf '%s' "$word" | grep -q '[*?[]'; then
+        WOULD="$(git -C "$d" add --dry-run -- "$word" 2>/dev/null | sed -nE "s/^add '(.*)'\$/\1/p")"
+        check_list "would be added by git add $word" "$WOULD"
+      fi
+    done <<<"$DIRS"
   done
 fi
+set +f
 
-# Files already staged, when committing. The commit may run in another repo
-# than the session folder (`cd app && git commit`, `git -C app commit`), so
-# check the session folder plus every folder the command names.
+# Files already staged, when committing.
 if printf '%s' "$CMD" | grep -qE '\bgit\b.*\bcommit\b'; then
-  BASE="${CWD:-$PWD}"
-  DIRS="$BASE"
-  TARGETS="$(printf '%s\n' "$CMD" | tr ';&|' '\n\n\n' | sed -nE \
-    -e 's/^[[:space:]]*(cd|pushd)[[:space:]]+([^[:space:]]+).*/\2/p' \
-    -e 's/.*git[[:space:]]+-C[[:space:]]+([^[:space:]]+).*/\1/p')"
-  while IFS= read -r t; do
-    [ -n "$t" ] || continue
-    t="${t%\"}"; t="${t#\"}"; t="${t%\'}"; t="${t#\'}"
-    case "$t" in
-      *'$'* | *'`'*)
-        # A variable we cannot expand here: refuse rather than check the wrong repo.
-        echo "Blocked by no-env-commit.sh: this commit runs in $t, which this hook cannot resolve, so it cannot check what is staged there." >&2
-        echo "Run the commit with a literal path (cd path/to/repo && git commit ...) so the staged files can be checked." >&2
-        exit 2 ;;
-      "~") t="$HOME" ;;
-      "~/"*) t="$HOME/${t#\~/}" ;;
-      /*) ;;
-      *) t="$BASE/$t" ;;
-    esac
-    DIRS="$DIRS
-$t"
-  done <<<"$TARGETS"
   while IFS= read -r d; do
     [ -d "$d" ] || continue
-    STAGED="$(git -C "$d" diff --cached --name-only 2>/dev/null)"
-    while IFS= read -r f; do
-      [ -n "$f" ] || continue
-      printf '%s' "$f" | grep -qE "$SAFE" && continue
-      printf '%s' "$f" | grep -qE "$SECRET" && block "$f (staged in $d)"
-    done <<<"$STAGED"
+    check_list "staged in $d" "$(git -C "$d" diff --cached --name-only 2>/dev/null)"
   done <<<"$DIRS"
 fi
 exit 0

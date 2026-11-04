@@ -266,6 +266,12 @@ expect no-env-commit.sh block "git -C another repo with .env staged" "$(cwd_payl
 expect no-env-commit.sh block "cd to a variable it cannot resolve" "$(cwd_payload 'cd "$APP" && git commit -m wip' "$TMP")"
 git -C "$SUB" rm -q --cached .env
 expect no-env-commit.sh allow "cd into another repo with nothing secret staged" "$(cwd_payload 'cd app && git commit -m wip' "$TMP/outer")"
+# Security review regressions: a folder or glob that would pull in a .env, and git pointed elsewhere.
+mkdir -p "$REPO/config" && : >"$REPO/config/.env" && : >"$REPO/config/app.json"
+expect no-env-commit.sh block "git add a folder holding a .env" "$(cwd_payload 'git add config/' "$REPO")"
+expect no-env-commit.sh block "git add a glob that matches a .env" "$(cwd_payload "git add 'config/*' && git commit -m wip" "$REPO")"
+expect no-env-commit.sh allow "git add a folder with no secrets" "$(cwd_payload 'git add src' "$REPO")"
+expect no-env-commit.sh block "git --git-dir elsewhere" "$(cwd_payload 'git --git-dir=/x/.git --work-tree=/x commit -m wip' "$REPO")"
 
 # untrusted-content-check.sh
 web_payload() { jq -n --arg r "$1" '{tool_name: "WebFetch", tool_input: {url: "https://example.com"}, tool_response: $r}'; }
