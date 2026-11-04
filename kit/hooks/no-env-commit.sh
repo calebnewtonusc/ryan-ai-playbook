@@ -39,10 +39,13 @@ if printf '%s' "$CMD" | grep -qE -- '--git-dir|--work-tree|GIT_DIR=|GIT_WORK_TRE
   echo "Run git from inside the repo (cd path/to/repo && git ...) instead." >&2
   exit 2
 fi
-# cd with no folder or with -, and nested shells, move git somewhere this
-# parser cannot follow. Refuse those when the command also runs git add/commit.
+# cd with no folder or with -, nested shells, eval, xargs, find -exec, env -C
+# and ( or { groups move git somewhere this parser cannot follow. Refuse those
+# when the command also runs git add/commit. This is a tripwire for honest
+# mistakes, not a sandbox: a shell is too rich for a pattern list to cover
+# every form, so a determined bypass is out of scope.
 if printf '%s' "$CMD" | grep -qE '\bgit\b.*\b(add|commit)\b' &&
-  printf '%s\n' "$CMD" | tr ';&|' '\n\n\n' | grep -qE '^[[:space:]]*(cd|pushd)[[:space:]]*(-[[:space:]]*)?$|\b(ba|z)?sh[[:space:]]+-c\b|\benv[[:space:]]+-C\b|(^|[[:space:]])\('; then
+  printf '%s\n' "$CMD" | sed -E "s/\"[^\"]*\"/Q/g; s/'[^']*'/Q/g" | tr ';&|' '\n\n\n' | grep -qE '^[[:space:]]*(cd|pushd)[[:space:]]*(-[^[:space:]]*[[:space:]]*)?$|^[[:space:]]*(cd|pushd)[[:space:]]+-|\b(ba|z|da|k)?sh[[:space:]]+-[A-Za-z]*c|\beval\b|\bxargs\b|-exec(dir)?\b|\benv\b[^|;&]*(-C|--chdir)|(^|[[:space:]])[({]'; then
   echo "Blocked by no-env-commit.sh: this command changes folder in a way the hook cannot follow (cd -, a bare cd, sh -c, env -C, or a subshell), so it cannot check what git will add or commit." >&2
   echo "Run git as its own command from inside the repo (cd path/to/repo && git ...)." >&2
   exit 2
@@ -79,25 +82,35 @@ check_list() {  # check_list <label> <newline-separated paths>
   done <<<"$2"
 }
 
-# Files named after `git add`. set -f stops a * in the command from expanding here.
+# Files `git add` would stage. set -f stops a * in the command from expanding here.
 set -f
-ADD_ARGS="$(printf '%s\n' "$CMD" | tr ';&|' '\n\n\n' | sed -nE 's/^[[:space:]]*git([[:space:]]+-[Cc][[:space:]]+[^[:space:]]+)*[[:space:]]+add[[:space:]]+//p')"
-if [ -n "$ADD_ARGS" ]; then
-  for word in $ADD_ARGS; do
+ADD_LINES="$(printf '%s\n' "$CMD" | tr ';&|' '\n\n\n' | sed -nE 's/^[[:space:]]*git([[:space:]]+-[Cc][[:space:]]+[^[:space:]]+)*[[:space:]]+add[[:space:]]+//p')"
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  case "$line" in
+    *'$'* | *'`'*)
+      # A variable or command we cannot expand: refuse rather than guess what it adds.
+      echo "Blocked by no-env-commit.sh: git add $line uses a shell expansion this hook cannot resolve." >&2
+      echo "Name the files literally (git add src/app.ts README.md) so they can be checked." >&2
+      exit 2 ;;
+  esac
+  ARGS=()
+  for word in $line; do
     word="${word%\"}"; word="${word#\"}"; word="${word%\'}"; word="${word#\'}"
+    case "$word" in -n | --dry-run) continue ;; esac
+    ARGS+=("$word")
     case "$word" in -*) continue ;; esac
     printf '%s' "$word" | grep -qE "$SAFE" && continue
     printf '%s' "$word" | grep -qE "$SECRET" && block "$word"
-    # A folder or a glob can pull in a .env it does not name: ask git what it would add.
-    while IFS= read -r d; do
-      safe_git -C "$d" rev-parse --is-inside-work-tree >/dev/null 2>&1 || continue
-      if [ -d "$d/$word" ] || printf '%s' "$word" | grep -q '[*?[]'; then
-        WOULD="$(safe_git -C "$d" add --dry-run -- "$word" 2>/dev/null | sed -nE "s/^add '(.*)'\$/\1/p")"
-        check_list "would be added by git add $word" "$WOULD"
-      fi
-    done <<<"$DIRS"
   done
-fi
+  # Folders, globs, :(magic) pathspecs and -f can stage a file the command never
+  # names, so ask git itself, with the same flags, what this add would stage.
+  while IFS= read -r d; do
+    safe_git -C "$d" rev-parse --is-inside-work-tree >/dev/null 2>&1 || continue
+    WOULD="$(safe_git -C "$d" add --dry-run "${ARGS[@]}" 2>/dev/null | sed -nE "s/^add '(.*)'\$/\1/p")"
+    check_list "would be added by git add $line" "$WOULD"
+  done <<<"$DIRS"
+done <<<"$ADD_LINES"
 set +f
 
 # Files already staged, when committing.
