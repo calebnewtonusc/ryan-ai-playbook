@@ -18,13 +18,15 @@ else
 fi
 [ -n "$CMD" ] || exit 0
 
-if printf '%s' "$CMD" | grep -Eq 'git[[:space:]]+add([[:space:]].*)?[[:space:]](-A|--all|\.|-u)([[:space:]]|;|&|$)'; then
+# Bulk forms: -A, -u, -Au and other combined short flags with A or u, --all,
+# --update, ., ./, *, and the repo-root pathspecs :/ and :(top).
+if printf '%s' "$CMD" | tr -d "\"'" | grep -Eq 'git[[:space:]]+add([[:space:]].*)?[[:space:]](-[a-zA-Z]*[Au][a-zA-Z]*|--all|--update|\.|\./|\*|:/|:\(top\))([[:space:]]|;|&|\||$)'; then
   echo "Blocked by no-git-add-all.sh: stage files by name, for example: git add src/app.ts README.md" >&2
   echo "Run git status first to see what changed, and leave out anything you did not mean to touch." >&2
   exit 2
 fi
 
-if printf '%s' "$CMD" | grep -Eq 'git[[:space:]]+commit([[:space:]].*)?[[:space:]]-[b-zA-Z]*a[a-zA-Z]*([[:space:]]|$)'; then
+if printf '%s' "$CMD" | tr -d "\"'" | grep -Eq 'git[[:space:]]+commit([[:space:]].*)?[[:space:]](-[a-zA-Z]*a[a-zA-Z]*|--all)([[:space:]]|;|&|\||$)'; then
   echo "Blocked by no-git-add-all.sh: git commit -a commits every modified file. Add files by name, then commit." >&2
   exit 2
 fi
